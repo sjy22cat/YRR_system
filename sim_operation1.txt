@@ -1,0 +1,53 @@
+请在当前仓库中，对以下 RTL 做一次独立的 SMIC 28nm 标准单元综合和时序评估：
+
+RTL：
+Attention_confusion/attention_head_2ctx_2dim_eval.sv
+
+顶层：
+attention_head_2ctx_2dim_eval
+
+使用默认推荐参数：
+HEAD_DIM=128
+TILE_SIZE=32
+MAX_CONTEXT=1152
+BLOCK_PARALLEL=2
+CONTEXT_PARALLEL=2
+PRE_SCALE_QUERY=1
+PIPELINE_SOFTMAX=1
+PIPELINE_MAC=1
+
+目标工艺库：
+SMIC 28nm RVT，优先使用项目已有的
+SCC28NHKCP_HSC35P140_RVT_V0p2
+SS / 0.9 V / 125°C 对应库。
+
+先检查当前环境中的 dc_shell、PrimeTime，以及对应 SMIC 库、DesignWare 综合库和浮点算子实现是否可用。使用官方综合实现的 DW_fp_mult、DW_fp_addsub、DW_fp_exp、DW_fp_div；不能使用 NONMAC_TEST_DW、nonmac_test_dw.sv 或其他功能仿真替代模型。检查这些浮点算子是否都已正确解析、综合和映射。若某个算子缺少综合实现或最终被当作黑盒，明确报告并停止把该结果称为完整面积/时序结果。
+
+不要修改原 RTL。不要用缩小参数后的结果替代上述默认配置。请在 Attention_confusion 下建立新的独立运行目录，保留 DC/PrimeTime Tcl、SDC、日志、网表和报告，不覆盖已有文件。如果综合因内存、运行时间或许可证失败，保留失败日志并报告失败阶段和原因，不要静默改变参数继续。
+
+采用如下布局前约束，并在生成的 SDC 中明确记录：
+- 时钟周期 1.000 ns，理想时钟
+- setup uncertainty 50 ps，hold uncertainty 20 ps
+- clock transition 50 ps
+- 所有数据输入 max delay 100 ps、min delay 0 ps；排除 clk 和 rst_n
+- 所有数据输出 max delay 100 ps、min delay 0 ps
+- 所有数据输入 transition 50 ps
+- 所有输出负载 5 fF
+- max transition 200 ps
+- rst_n 按外部同步解除复位假设设 false path
+- 不要添加其他 false path 或 multicycle exception 来隐藏真实路径
+- 不使用布局布线寄生；如无 SPEF，结果必须标为布局前估算
+
+请完成并保存：
+1. RTL elaboration、link 和 check_design 报告，检查 latch、未连接端口、未解析模块、黑盒和综合警告。
+2. 映射后标准单元面积、组合/时序面积、总单元数、寄存器/触发器数量、主要单元类型和层次面积报告。
+3. 浮点乘法器、加法器、exp、除法器的实例或映射统计；说明综合后哪些逻辑被优化或共享。
+4. 1 ns 下 setup 和 hold 报告：WNS、TNS、违例端点数、最差路径完整起终点及逐级单元延迟。
+5. 再做一个时钟周期扫描，估计该网表满足 setup 的最小时钟周期；同时单独报告 hold，不要把 setup 通过误写成 setup/hold 都通过。
+6. 检查时序报告中的最差路径，并判断它对应哪些实际 RTL 算术级或输入/寄存器路径。不要仅依据旧设计的关键路径推断当前结果。
+7. 运行已有的默认参数 1152-token latency regression，记录 o_cycle_count 和仿真条件。该仿真只用于测周期，不能用于证明 1 ns 时序通过。
+8. 若环境具备 PrimePower/PrimeTime PX 和有效活动文件，再估算活动功耗；使用有输入变化的代表性活动，报告活动标注覆盖率和假设。不要用全零周期测试估算动态功耗。若无法可靠标注，就报告功耗未测，不要编造数值。
+
+最终请给出工具版本、实际使用的库和工艺角、参数、约束、面积、时序、周期数、功耗状态、报告目录及所有未完成项，并明确区分布局前估算与布局布线后的结果。
+
+其中 min input delay 取 0 ps 是为了和你之前的基线条件保持一致；如果 hold 报告出现违例，可以再补一轮 min input delay 10 ps 的敏感性检查，但要和原始条件的结果分开报告。
